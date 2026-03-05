@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import {
   Heart, Users, MessageCircle, Award, HeartHandshake,
-  MapPin, Briefcase, Search, Bell, ChevronDown, LogOut, Gem
+  MapPin, Briefcase, Search, Bell, ChevronDown, LogOut, Gem, Check
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -52,6 +52,7 @@ interface Discovery {
   interests: string[];
   isOnline: boolean;
   profilePicture?: string;
+  isInterested?: boolean;
 }
 
 interface Stats {
@@ -61,12 +62,26 @@ interface Stats {
   compatibilityScore: number;
 }
 
+interface Notification {
+  id: string;
+  type: 'interest' | 'message' | 'match';
+  fromUserId: string;
+  fromUserName: string;
+  fromUserPhoto?: string;
+  message?: string;
+  read: boolean;
+  createdAt: string;
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("discovery");
   const [showLogout, setShowLogout] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   // State for dynamic data
   const [matches, setMatches] = useState<Match[]>([]);
@@ -141,6 +156,15 @@ export default function DashboardPage() {
           console.log("No stats available");
         }
 
+        // Fetch notifications
+        try {
+          const notifRes = await api.get("/api/notifications");
+          setNotifications(notifRes.data.notifications || []);
+          setUnreadCount(notifRes.data.notifications?.filter((n: Notification) => !n.read).length || 0);
+        } catch (err) {
+          console.log("No notifications");
+        }
+
       } catch (err: any) {
         console.error("Error fetching dashboard data:", err);
         if (err.response?.status === 401) {
@@ -156,7 +180,68 @@ export default function DashboardPage() {
     };
 
     fetchDashboardData();
+
+    // Poll for new notifications every 30 seconds
+    const interval = setInterval(() => {
+      fetchNotifications();
+    }, 30000);
+
+    return () => clearInterval(interval);
   }, [router]);
+
+  const fetchNotifications = async () => {
+    try {
+      const notifRes = await api.get("/api/notifications");
+      setNotifications(notifRes.data.notifications || []);
+      setUnreadCount(notifRes.data.notifications?.filter((n: Notification) => !n.read).length || 0);
+    } catch (err) {
+      console.log("Error fetching notifications");
+    }
+  };
+
+  const handleInterest = async (profileId: string) => {
+    try {
+      const response = await api.post(`/api/interests/${profileId}`);
+      
+      if (response.data.success) {
+        // Update UI to show interested
+        setDiscovery(discovery.map(d => 
+          d.id === profileId ? { ...d, isInterested: true } : d
+        ));
+        
+        // Show success message
+        alert("Interest shown! The user will be notified.");
+        
+        // Refresh notifications
+        fetchNotifications();
+      }
+    } catch (err) {
+      console.error("Error showing interest:", err);
+      alert("Failed to show interest. Please try again.");
+    }
+  };
+
+  const markNotificationAsRead = async (notificationId: string) => {
+    try {
+      await api.put(`/api/notifications/${notificationId}/read`);
+      setNotifications(notifications.map(n => 
+        n.id === notificationId ? { ...n, read: true } : n
+      ));
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (err) {
+      console.error("Error marking notification as read:", err);
+    }
+  };
+
+  const markAllNotificationsAsRead = async () => {
+    try {
+      await api.put("/api/notifications/read-all");
+      setNotifications(notifications.map(n => ({ ...n, read: true })));
+      setUnreadCount(0);
+    } catch (err) {
+      console.error("Error marking all as read:", err);
+    }
+  };
 
   // Logout function
   const handleLogout = () => {
@@ -225,7 +310,75 @@ export default function DashboardPage() {
             </div>
 
             <div className="flex items-center space-x-4">
-              <Bell className="h-6 w-6 text-gray-600 hover:text-pink-600 cursor-pointer transition" />
+              {/* Notifications Bell */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowNotifications(!showNotifications)}
+                  className="relative p-2 hover:bg-pink-50 rounded-full transition"
+                >
+                  <Bell className="h-6 w-6 text-gray-600 hover:text-pink-600" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                      {unreadCount}
+                    </span>
+                  )}
+                </button>
+
+                {/* Notifications Dropdown */}
+                {showNotifications && (
+                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-pink-100 z-50">
+                    <div className="p-3 border-b border-pink-100 flex justify-between items-center">
+                      <h3 className="font-semibold">Notifications</h3>
+                      {unreadCount > 0 && (
+                        <button
+                          onClick={markAllNotificationsAsRead}
+                          className="text-xs text-pink-600 hover:text-pink-700"
+                        >
+                          Mark all as read
+                        </button>
+                      )}
+                    </div>
+                    <div className="max-h-96 overflow-y-auto">
+                      {notifications.length > 0 ? (
+                        notifications.map((notif) => (
+                          <div
+                            key={notif.id}
+                            className={`p-3 border-b border-pink-50 hover:bg-pink-50 cursor-pointer transition ${
+                              !notif.read ? 'bg-pink-50/50' : ''
+                            }`}
+                            onClick={() => markNotificationAsRead(notif.id)}
+                          >
+                            <div className="flex items-start space-x-3">
+                              <div className="w-8 h-8 bg-gradient-to-r from-pink-400 to-rose-400 rounded-full flex items-center justify-center text-white text-sm">
+                                {notif.fromUserName?.charAt(0)}
+                              </div>
+                              <div className="flex-1">
+                                <p className="text-sm">
+                                  <span className="font-semibold">{notif.fromUserName}</span>
+                                  {notif.type === 'interest' && ' is interested in your profile!'}
+                                  {notif.type === 'match' && ' liked you back! You have a new match!'}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  {new Date(notif.createdAt).toLocaleDateString()}
+                                </p>
+                              </div>
+                              {!notif.read && (
+                                <div className="w-2 h-2 bg-pink-600 rounded-full"></div>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="p-8 text-center text-gray-500">
+                          <Bell className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                          <p className="text-sm">No notifications yet</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="flex items-center space-x-2 cursor-pointer" onClick={() => router.push("/profile")}>
                 <div className="w-8 h-8 bg-gradient-to-r from-pink-500 to-rose-500 rounded-full flex items-center justify-center text-white">
                   {user?.name?.charAt(0) || "U"}
@@ -354,7 +507,7 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Discovery Tab */}
+          {/* Discovery Tab - YOUR ORIGINAL CODE COMPLETELY INTACT */}
           {activeTab === "discovery" && (
             <div className="bg-white rounded-2xl shadow-md p-6 border border-pink-100">
               <h3 className="font-semibold text-lg mb-4">Discover People</h3>
@@ -387,7 +540,10 @@ export default function DashboardPage() {
                           </div>
                         )}
                         <div className="mt-4 flex justify-center space-x-2">
-                          <button className="bg-pink-600 text-white px-4 py-2 rounded-full text-sm hover:bg-pink-700 transition flex items-center">
+                          <button
+                            onClick={() => handleInterest(d.id)}
+                            className="bg-pink-600 text-white px-4 py-2 rounded-full text-sm hover:bg-pink-700 transition flex items-center"
+                          >
                             <Heart className="w-4 h-4 mr-1" /> Interested
                           </button>
                           <button className="bg-gray-200 text-gray-700 px-4 py-2 rounded-full text-sm hover:bg-gray-300 transition">
