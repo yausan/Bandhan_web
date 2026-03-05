@@ -7,8 +7,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
-  const [isHovered, setIsHovered] = useState(false);
-
   // Form state
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -37,11 +35,18 @@ export default function LoginPage() {
         return;
       }
 
-      // Save token or session (if using JWT)
+      // Save token AND user data
       localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
+      
+      console.log("Login successful:", data.user); // For debugging
 
-      setLoading(false);
-      router.push("/dashboard"); // redirect after successful login
+      // Redirect based on user role
+      if (data.user && data.user.isAdmin) {
+        router.push("/admin");
+      } else {
+        router.push("/dashboard");
+      }
     } catch (err) {
       console.error(err);
       setError("Something went wrong. Try again.");
@@ -133,7 +138,7 @@ export default function LoginPage() {
               </div>
               <h2 className="text-3xl font-bold mb-2">
                 <span className="bg-linear-to-r from-pink-600 to-rose-600 bg-clip-text text-transparent">
-                  Welcome
+                  Welcome Back
                 </span>
               </h2>
               <p className="text-gray-500">Sign in to continue your matrimony journey</p>
@@ -163,7 +168,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 required
-                className="w-full px-4 py-2 border rounded-lg"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
               />
               <input
                 type="password"
@@ -171,35 +176,38 @@ export default function LoginPage() {
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required
-                className="w-full px-4 py-2 border rounded-lg"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
               />
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-2 px-4 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition"
+                className="w-full py-3 px-4 bg-gradient-to-r from-pink-600 to-rose-600 text-white rounded-lg hover:from-pink-700 hover:to-rose-700 transition disabled:opacity-50 font-semibold"
               >
                 {loading ? "Signing in..." : "Sign In"}
               </button>
-              {error && <p className="text-red-500">{error}</p>}
+              {error && (
+                <div className="p-3 bg-red-50 text-red-600 rounded-lg text-sm">
+                  {error}
+                </div>
+              )}
             </form>
 
-            <div className="mt-6 text-center">
+            <div className="mt-4 text-right">
               <Link 
                 href="/forgot-password" 
-                className="text-sm text-pink-500 hover:text-pink-600 hover:underline"
+                className="text-sm text-pink-600 hover:text-pink-700 hover:underline"
               >
                 Forgot password?
               </Link>
             </div>
 
-            <p className="mt-8 text-center text-gray-500">
+            <p className="mt-6 text-center text-gray-600">
               Don't have an account?{" "}
               <Link 
                 href="/register" 
-                className="text-pink-600 font-semibold hover:text-pink-700 transition relative group"
+                className="text-pink-600 font-semibold hover:text-pink-700 transition"
               >
                 Create one now
-                <span className="absolute bottom-0 left-0 w-full h-0.5 bg-pink-600 transform scale-x-0 group-hover:scale-x-100 transition-transform"></span>
               </Link>
             </p>
 
