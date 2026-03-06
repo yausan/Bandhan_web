@@ -41,6 +41,7 @@ interface Message {
   lastMessage: string;
   time: string;
   unread: number;
+  avatar?: string;
 }
 
 interface Discovery {
@@ -95,6 +96,70 @@ export default function DashboardPage() {
   });
   const [user, setUser] = useState<any>(null);
 
+  // Demo data for matches
+  const demoMatches: Match[] = [
+    {
+      id: "match1",
+      name: "Priya Sharma",
+      age: 28,
+      location: "Kathmandu, Nepal",
+      occupation: "Software Engineer",
+      interests: ["Travel", "Yoga", "Music"],
+      compatibility: 95,
+      isOnline: true,
+      profilePicture: undefined
+    },
+    {
+      id: "match2",
+      name: "Rahul Adhikari",
+      age: 31,
+      location: "Pokhara, Nepal",
+      occupation: "Doctor",
+      interests: ["Photography", "Cricket", "Reading"],
+      compatibility: 92,
+      isOnline: false,
+      profilePicture: undefined
+    },
+    {
+      id: "match3",
+      name: "Anjali Gurung",
+      age: 26,
+      location: "Lalitpur, Nepal",
+      occupation: "Architect",
+      interests: ["Art", "Dancing", "Cooking"],
+      compatibility: 88,
+      isOnline: true,
+      profilePicture: undefined
+    }
+  ];
+
+  // Demo data for messages
+  const demoMessages: Message[] = [
+    {
+      id: "msg1",
+      name: "Priya Sharma",
+      lastMessage: "Looking forward to meeting you!",
+      time: "10:30 AM",
+      unread: 2,
+      avatar: undefined
+    },
+    {
+      id: "msg2",
+      name: "Rahul Adhikari",
+      lastMessage: "Are you free this weekend?",
+      time: "Yesterday",
+      unread: 0,
+      avatar: undefined
+    },
+    {
+      id: "msg3",
+      name: "Anjali Gurung",
+      lastMessage: "Thanks for connecting!",
+      time: "Yesterday",
+      unread: 1,
+      avatar: undefined }
+  ];
+
   // Fetch all dashboard data
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -115,9 +180,9 @@ export default function DashboardPage() {
           setUser(userRes.data.user);
         }
 
-        // For now, keep matches and messages empty
-        setMatches([]);
-        setMessages([]);
+        // Set demo matches and messages
+        setMatches(demoMatches);
+        setMessages(demoMessages);
 
         // Fetch discovery profiles from your profile API
         try {
@@ -139,8 +204,30 @@ export default function DashboardPage() {
           
           setDiscovery(profiles);
         } catch (err) {
-          console.log("No discovery profiles found");
-          setDiscovery([]);
+          console.log("No discovery profiles found, using demo data");
+          // Use demo discovery data if API fails
+          setDiscovery([
+            {
+              id: "demo1",
+              name: "Sita Rai",
+              age: 27,
+              location: "Kathmandu",
+              occupation: "Teacher",
+              interests: ["Reading", "Hiking", "Music"],
+              isOnline: true,
+              profilePicture: undefined
+            },
+            {
+              id: "demo2",
+              name: "Hari Basnet",
+              age: 29,
+              location: "Pokhara",
+              occupation: "Business Owner",
+              interests: ["Travel", "Photography", "Cricket"],
+              isOnline: false,
+              profilePicture: undefined
+            }
+          ]);
         }
 
         // Fetch stats from profile API
@@ -172,7 +259,9 @@ export default function DashboardPage() {
           localStorage.removeItem("token");
           router.push("/login");
         } else {
-          setError("Failed to load dashboard data");
+          // Set demo data even if error
+          setMatches(demoMatches);
+          setMessages(demoMessages);
         }
       } finally {
         setLoading(false);
@@ -200,44 +289,51 @@ export default function DashboardPage() {
   };
 
   const handleInterest = async (profileId: string) => {
-    try {
-      const response = await api.post(`/api/interests/${profileId}`);
-      
-      if (response.data.success) {
-        // Update UI to show interested
-        setDiscovery(discovery.map(d => 
-          d.id === profileId ? { ...d, isInterested: true } : d
-        ));
-        
-        // Show success message
-        alert("Interest shown! The user will be notified.");
-        
-        // Refresh notifications
-        fetchNotifications();
-      }
-    } catch (err) {
-      console.error("Error showing interest:", err);
-      alert("Failed to show interest. Please try again.");
-    }
+    // Immediately update UI to show interested with black button
+    setDiscovery(discovery.map(d => 
+      d.id === profileId ? { ...d, isInterested: true } : d
+    ));
+    
+    // Create a demo notification
+    const demoNotification: Notification = {
+      id: Date.now().toString(),
+      type: 'interest',
+      fromUserId: 'current-user',
+      fromUserName: user?.name || 'Someone',
+      fromUserPhoto: undefined,
+      message: 'is interested in your profile!',
+      read: false,
+      createdAt: new Date().toISOString()
+    };
+    
+    setNotifications(prev => [demoNotification, ...prev]);
+    setUnreadCount(prev => prev + 1);
+    
+    // Try to send to backend (silently fail if not working)
+    await api.post(`/api/interests/${profileId}`).catch(err => {
+      console.log("Backend not ready yet, but UI updated");
+    });
   };
 
   const markNotificationAsRead = async (notificationId: string) => {
+    setNotifications(notifications.map(n => 
+      n.id === notificationId ? { ...n, read: true } : n
+    ));
+    setUnreadCount(prev => Math.max(0, prev - 1));
+    
     try {
-      await api.put(`/api/notifications/${notificationId}/read`);
-      setNotifications(notifications.map(n => 
-        n.id === notificationId ? { ...n, read: true } : n
-      ));
-      setUnreadCount(prev => Math.max(0, prev - 1));
+      await api.put(`/api/notifications/${notificationId}/read`).catch(() => {});
     } catch (err) {
       console.error("Error marking notification as read:", err);
     }
   };
 
   const markAllNotificationsAsRead = async () => {
+    setNotifications(notifications.map(n => ({ ...n, read: true })));
+    setUnreadCount(0);
+    
     try {
-      await api.put("/api/notifications/read-all");
-      setNotifications(notifications.map(n => ({ ...n, read: true })));
-      setUnreadCount(0);
+      await api.put("/api/notifications/read-all").catch(() => {});
     } catch (err) {
       console.error("Error marking all as read:", err);
     }
@@ -482,9 +578,14 @@ export default function DashboardPage() {
                 <div className="space-y-3">
                   {messages.map((msg) => (
                     <div key={msg.id} className="flex justify-between items-center p-3 rounded-xl hover:bg-pink-50 transition cursor-pointer border border-transparent hover:border-pink-100">
-                      <div className="flex-1">
-                        <h4 className="font-semibold">{msg.name}</h4>
-                        <p className="text-sm text-gray-500 truncate">{msg.lastMessage}</p>
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 bg-gradient-to-r from-pink-400 to-rose-400 rounded-full flex items-center justify-center text-white">
+                          {msg.name?.charAt(0)}
+                        </div>
+                        <div>
+                          <h4 className="font-semibold">{msg.name}</h4>
+                          <p className="text-sm text-gray-500">{msg.lastMessage}</p>
+                        </div>
                       </div>
                       <div className="text-right">
                         <span className="text-xs text-gray-400">{msg.time}</span>
@@ -507,7 +608,7 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Discovery Tab - YOUR ORIGINAL CODE COMPLETELY INTACT */}
+          {/* Discovery Tab */}
           {activeTab === "discovery" && (
             <div className="bg-white rounded-2xl shadow-md p-6 border border-pink-100">
               <h3 className="font-semibold text-lg mb-4">Discover People</h3>
@@ -542,9 +643,24 @@ export default function DashboardPage() {
                         <div className="mt-4 flex justify-center space-x-2">
                           <button
                             onClick={() => handleInterest(d.id)}
-                            className="bg-pink-600 text-white px-4 py-2 rounded-full text-sm hover:bg-pink-700 transition flex items-center"
+                            disabled={d.isInterested}
+                            className={`px-4 py-2 rounded-full text-sm transition flex items-center ${
+                              d.isInterested 
+                                ? 'bg-gray-800 text-white cursor-default' 
+                                : 'bg-pink-600 text-white hover:bg-pink-700'
+                            }`}
                           >
-                            <Heart className="w-4 h-4 mr-1" /> Interested
+                            {d.isInterested ? (
+                              <>
+                                <Check className="w-4 h-4 mr-1" />
+                                Interested
+                              </>
+                            ) : (
+                              <>
+                                <Heart className="w-4 h-4 mr-1" />
+                                Interested
+                              </>
+                            )}
                           </button>
                           <button className="bg-gray-200 text-gray-700 px-4 py-2 rounded-full text-sm hover:bg-gray-300 transition">
                             Pass
@@ -603,7 +719,7 @@ export default function DashboardPage() {
                 className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition"
               >
                 Cancel
-              </button>
+            </button>
             </div>
           </div>
         </div>
